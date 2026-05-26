@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -14,6 +14,16 @@ CORS(app)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").replace('"', '').replace("'", "").strip()
 
+# --- ROTAS DO FRONTEND ---
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/home')
+def home():
+    return render_template('home.html')
+
+# --- ROTA DA INTELIGÊNCIA ---
 @app.route('/oraculo', methods=['POST'])
 def oraculo():
     data = request.json or {}
