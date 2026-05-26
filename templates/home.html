@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CORTEX | Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --obsidian: #0D0D0D;
+            --titanium: #1C1C1E;
+            --cyan-glow: #00F0FF;
+            --emerald: #00E676;
+            --crimson: #FF2A4D;
+            --glass: rgba(20, 20, 20, 0.7);
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--obsidian);
+            overflow-x: hidden;
+        }
+
+        .liquid-glass {
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            background: var(--glass);
+            border: 1px solid var(--border);
+        }
+
+        .numpad-btn {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .numpad-btn:active {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(0.96);
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(0, 240, 255, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 80% 70%, rgba(0, 230, 118, 0.04) 0%, transparent 50%),
+                radial-gradient(circle at 50% -20%, rgba(0, 240, 255, 0.08) 0%, transparent 60%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 250px;
+        }
+
+        .status-led {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .led-active { background: var(--emerald); box-shadow: 0 0 12px 2px rgba(0, 230, 118, 0.4); }
+        .led-alert { background: var(--crimson); box-shadow: 0 0 12px 2px rgba(255, 42, 77, 0.4); }
+        .led-sync { background: var(--cyan-glow); box-shadow: 0 0 12px 2px rgba(0, 240, 255, 0.4); }
+
+        .ticker-wrap {
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .ticker-move {
+            display: inline-block;
+            animation: ticker 40s linear infinite;
+        }
+
+        @keyframes ticker {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        #jarvis-cursor::after {
+            content: '_';
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        .anim {
+            opacity: 0;
+            transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .anim-up { transform: translateY(40px); }
+        .is-visible {
+            opacity: 1;
+            transform: translate(0) scale(1);
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="text-white selection:bg-cyan-500/30">
+
+    <!-- AVISO DE AMBIENTE CANVAS -->
+    <div id="canvas-warning" class="hidden fixed bottom-6 right-6 z-[100] liquid-glass border-l-2 border-crimson-500 p-6 rounded-xl max-w-sm shadow-2xl anim anim-up">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="status-led led-alert animate-pulse"></div>
+            <span class="text-[10px] font-mono text-crimson-400 font-bold uppercase tracking-[0.2em]">Modo de Simulação</span>
+        </div>
+        <p class="text-[9px] font-mono text-white/60 leading-relaxed uppercase tracking-wider">
+            Sistema operando em ambiente de pré-visualização (Canvas). O Motor Neural da Nvidia e o Banco de Dados estão restritos. O sistema responderá com simulações visuais.
+        </p>
+    </div>
+
+    <!-- OVERLAY DE ONBOARDING (PRIMEIRO ACESSO) -->
+    <div id="cortex-onboarding" class="fixed inset-0 z-[100] bg-[#0D0D0D] flex flex-col items-center justify-center transition-all duration-1000">
+        
+        <!-- Etapa 1: Bem-vindo -->
+        <div id="onb-step-1" class="absolute inset-0 flex flex-col items-center justify-center p-8 transition-all duration-700 opacity-100">
+            <span class="text-[10px] font-mono text-white/30 uppercase tracking-[0.3em] mb-4">Plataforma de Análise</span>
+            <h1 class="text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter mb-6 text-center max-w-4xl">ANÁLISE DE INVESTIMENTOS.</h1>
+            <p class="text-white/40 font-mono text-xs uppercase tracking-widest mb-12 text-center">Acesse recomendações baseadas em dados de mercado.</p>
+            <button onclick="nextOnboardingStep(2)" class="border border-white/20 px-10 py-5 text-xs font-bold uppercase tracking-[0.2em] hover:bg-white hover:text-black transition-all shadow-[0_0_30px_rgba(255,255,255,0.05)]">Continuar</button>
+        </div>
+
+        <!-- Etapa 2: Orçamento -->
+        <div id="onb-step-2" class="absolute inset-0 flex flex-col items-center justify-center p-8 transition-all duration-700 opacity-0 pointer-events-none translate-y-8">
+            <span class="text-[10px] font-mono text-cyan-400 uppercase tracking-[0.3em] mb-4">Configuração Inicial</span>
+            <h2 class="text-3xl md:text-5xl font-black tracking-tighter mb-2 text-center">QUAL O VALOR DO SEU INVESTIMENTO?</h2>
+            <p class="text-white/40 font-mono text-[10px] uppercase mb-12 text-center max-w-sm leading-relaxed">Informe o capital disponível para receber um relatório personalizado.</p>
+
+            <div id="onb-display" class="text-5xl md:text-6xl font-black tracking-tighter mb-10 transition-colors duration-300">R$ 0</div>
+            <div class="grid grid-cols-3 gap-2 w-full max-w-xs">
+                <button onclick="pressOnboardingKey(1)" class="numpad-btn h-16 rounded-sm text-xl font-bold">1</button>
+                <button onclick="pressOnboardingKey(2)" class="numpad-btn h-16 rounded-sm text-xl font-bold">2</button>
+                <button onclick="pressOnboardingKey(3)" class="numpad-btn h-16 rounded-sm text-xl font-bold">3</button>
+                <button onclick="pressOnboardingKey(4)" class="numpad-btn h-16 rounded-sm text-xl font-bold">4</button>
+                <button onclick="pressOnboardingKey(5)" class="numpad-btn h-16 rounded-sm text-xl font-bold">5</button>
+                <button onclick="pressOnboardingKey(6)" class="numpad-btn h-16 rounded-sm text-xl font-bold">6</button>
+                <button onclick="pressOnboardingKey(7)" class="numpad-btn h-16 rounded-sm text-xl font-bold">7</button>
+                <button onclick="pressOnboardingKey(8)" class="numpad-btn h-16 rounded-sm text-xl font-bold">8</button>
+                <button onclick="pressOnboardingKey(9)" class="numpad-btn h-16 rounded-sm text-xl font-bold">9</button>
+                <button onclick="clearOnboardingKey()" class="numpad-btn h-16 rounded-sm text-[10px] font-bold text-white/20 uppercase tracking-widest">Clear</button>
+                <button onclick="pressOnboardingKey(0)" class="numpad-btn h-16 rounded-sm text-xl font-bold">0</button>
+                <button onclick="finishOnboardingInput()" class="h-16 rounded-sm bg-white text-black font-black text-[10px] uppercase tracking-widest transition-all hover:invert active:scale-95 col-span-3 mt-2">Confirmar</button>
+            </div>
+        </div>
+
+        <!-- Etapa 3: Analisando -->
+        <div id="onb-step-3" class="absolute inset-0 flex flex-col items-center justify-center p-8 transition-all duration-700 opacity-0 pointer-events-none translate-y-8">
+            <div class="relative w-24 h-24 mb-10 flex items-center justify-center">
+                <div class="absolute inset-0 border-t-2 border-cyan-400 rounded-full animate-spin"></div>
+                <div class="absolute inset-2 border-r-2 border-emerald-400 rounded-full animate-[spin_2s_reverse_infinite]"></div>
+            </div>
+            <h2 id="onb-loading-text" class="text-xl md:text-2xl font-black tracking-tighter mb-6 text-center">CARREGANDO DADOS...</h2>
+            <div id="onb-sub-loading" class="text-white/40 font-mono text-[10px] uppercase tracking-[0.2em] text-center space-y-3">
+                <p class="animate-pulse">Consultando indicadores...</p>
+                <p class="animate-pulse delay-100">Analisando mercado...</p>
+            </div>
+        </div>
+    </div>
+
+    <nav class="fixed top-0 w-full pt-6 pb-12 px-8 flex items-center justify-between z-50">
+        <div class="absolute inset-0 bg-gradient-to-b from-[#0D0D0D]/90 via-[#0D0D0D]/40 to-transparent backdrop-blur-md [mask-image:linear-gradient(to_bottom,black_50%,transparent_100%)] -z-10 pointer-events-none"></div>
+        
+        <div class="flex items-center space-x-6 relative">
+            <span class="font-black text-2xl tracking-tighter">CORTEX</span>
+            <div id="nav-internal" class="flex space-x-8 text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
+                <button onclick="switchTab('feed')" id="tab-feed" class="hover:text-white transition text-white">Início</button>
+                <button onclick="switchTab('radar')" id="tab-radar" class="hover:text-white transition">Meus Ativos</button>
+                <button onclick="switchTab('teses')" id="tab-teses" class="hover:text-white transition">Gráficos</button>
+            </div>
+        </div>
+        <div class="flex items-center space-x-6 relative">
+            <button onclick="logout()" class="text-white/40 hover:text-white transition text-[10px] font-bold uppercase tracking-widest">Sair</button>
+        </div>
+    </nav>
+
+    <div id="dashboard" class="pt-32 px-8 min-h-screen">
+        
+        <div id="tab-content-feed" class="is-visible anim anim-up max-w-6xl mx-auto">
+            <div class="mb-12">
+                <h2 class="text-4xl font-black tracking-tighter">VISÃO GERAL DO MERCADO</h2>
+                <div class="ticker-wrap mt-4 border-y border-white/5 py-3">
+                    <div id="ticker-live" class="ticker-move font-mono text-[11px] text-white/50 uppercase space-x-12">
+                        <span>• SINCRONIZANDO COM SERVIDOR CACHE...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Artigo Principal -->
+                <div class="lg:col-span-2 liquid-glass rounded-2xl overflow-hidden relative group min-h-[400px] flex flex-col justify-end">
+                    <img src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80" alt="Market Graph" class="absolute inset-0 w-full h-full object-cover opacity-20 group-hover:opacity-40 transition duration-700 pointer-events-none">
+                    <div class="p-8 relative z-10 bg-gradient-to-t from-black via-black/90 to-transparent w-full">
+                        <span class="text-[10px] font-mono text-cyan-400 font-bold uppercase mb-4 block flex items-center gap-2">
+                            <span id="news-indicator" class="status-led led-sync"></span> 
+                            <span id="news-status-text">Status: Conectando</span>
+                        </span>
+                        <h3 id="news-title" class="text-3xl md:text-4xl font-black mb-4 leading-tight">Carregando painel...</h3>
+                        <p id="news-body" class="text-sm text-white/70 leading-relaxed max-w-3xl whitespace-pre-wrap">Buscando informações do mercado. Aguarde um momento.</p>
+                    </div>
+                </div>
+
+                <!-- Painel Lateral -->
+                <div class="liquid-glass p-8 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between border-b border-white/5 pb-4 mb-6">
+                            <h4 class="font-bold text-sm">Status do Servidor</h4>
+                            <span id="cache-timer" class="text-[10px] font-mono text-white/40 border border-white/10 px-2 py-1 rounded">CACHED</span>
+                        </div>
+                        
+                        <span class="text-[10px] font-mono text-white/40 uppercase mb-4 block">Última Leitura de Ativos</span>
+                        <ul class="text-xs space-y-4 text-white/60 font-mono">
+                            <li class="flex justify-between">
+                                <span>BINANCE (BTC)</span>
+                                <strong id="side-btc" class="text-white">Aguardando...</strong>
+                            </li>
+                            <li class="flex justify-between">
+                                <span>B3 (PETR4)</span>
+                                <strong id="side-petr4" class="text-white">Aguardando...</strong>
+                            </li>
+                            <li class="flex justify-between">
+                                <span>NASDAQ (SPY)</span>
+                                <strong id="side-spy" class="text-white">Aguardando...</strong>
+                            </li>
+                            <li class="flex justify-between">
+                                <span>FRED (T10Y2Y)</span>
+                                <strong id="side-fred" class="text-white">Aguardando...</strong>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="mt-8 pt-6 border-t border-white/5">
+                        <p class="text-[9px] font-mono text-white/30 uppercase leading-relaxed">
+                            Os dados são atualizados periodicamente para garantir a estabilidade da plataforma.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botão Flutuante de Nova Operação (+) -->
+        <button onclick="openTerminalModal()" class="fixed bottom-10 left-1/2 -translate-x-1/2 z-[40] bg-white text-black w-16 h-16 rounded-full flex items-center justify-center text-4xl font-light hover:scale-110 active:scale-95 transition-transform shadow-[0_0_30px_rgba(255,255,255,0.2)]">
+            +
+        </button>
+
+        <!-- Modal do Terminal -->
+        <div id="terminal-modal" class="fixed inset-0 z-[60] hidden flex-col items-center justify-center bg-[#0D0D0D]/90 backdrop-blur-md opacity-0 transition-opacity duration-300">
+            <button onclick="closeTerminalModal()" class="absolute top-10 right-10 text-white/40 hover:text-white text-3xl font-light transition-colors">✕</button>
+            
+            <div class="border border-white/5 bg-black/40 p-12 relative overflow-hidden rounded-3xl w-full max-w-2xl mx-4 flex flex-col items-center">
+                <div class="mb-12 h-20 w-full text-center">
+                    <div id="jarvis-greeting" class="text-xl font-light text-white/80 leading-relaxed inline-block"></div>
+                    <div id="jarvis-cursor"></div>
+                </div>
+                <div class="flex flex-col items-center w-full max-w-xs">
+                    <span class="text-[10px] font-mono text-white/20 uppercase tracking-widest mb-2">Capital Disponível</span>
+                    <div id="terminal-display" class="text-6xl font-black tracking-tighter mb-12 transition-colors duration-300 text-center w-full">R$ 0</div>
+                    <div class="grid grid-cols-3 gap-2 w-full">
+                        <button onclick="pressKey(1)" class="numpad-btn h-16 rounded-sm text-xl font-bold">1</button>
+                        <button onclick="pressKey(2)" class="numpad-btn h-16 rounded-sm text-xl font-bold">2</button>
+                        <button onclick="pressKey(3)" class="numpad-btn h-16 rounded-sm text-xl font-bold">3</button>
+                        <button onclick="pressKey(4)" class="numpad-btn h-16 rounded-sm text-xl font-bold">4</button>
+                        <button onclick="pressKey(5)" class="numpad-btn h-16 rounded-sm text-xl font-bold">5</button>
+                        <button onclick="pressKey(6)" class="numpad-btn h-16 rounded-sm text-xl font-bold">6</button>
+                        <button onclick="pressKey(7)" class="numpad-btn h-16 rounded-sm text-xl font-bold">7</button>
+                        <button onclick="pressKey(8)" class="numpad-btn h-16 rounded-sm text-xl font-bold">8</button>
+                        <button onclick="pressKey(9)" class="numpad-btn h-16 rounded-sm text-xl font-bold">9</button>
+                        <button onclick="clearNumpad()" class="numpad-btn h-16 rounded-sm text-[10px] font-bold text-white/20 uppercase">Clear</button>
+                        <button onclick="pressKey(0)" class="numpad-btn h-16 rounded-sm text-xl font-bold">0</button>
+                        <button onclick="runAnalysis()" class="h-16 rounded-sm bg-white text-black font-black text-[10px] uppercase transition-all hover:invert active:scale-95">Start</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Resultado da Análise (Janela Separada) -->
+        <div id="report-modal" class="fixed inset-0 z-[70] hidden flex items-center justify-center bg-black/80 backdrop-blur-sm opacity-0 transition-opacity duration-300 p-4">
+            <div class="border border-white/10 bg-[#121212] relative overflow-hidden rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col">
+                <!-- Header -->
+                <div class="px-6 md:px-8 py-5 md:py-6 border-b border-white/5 flex items-center justify-between bg-white/5">
+                    <div class="flex items-center gap-3">
+                        <div id="report-led" class="status-led led-active"></div>
+                        <span id="report-tag" class="text-[10px] md:text-xs font-bold text-cyan-400 uppercase tracking-widest">Diretriz Estratégica</span>
+                    </div>
+                    <button onclick="closeReportModal()" class="text-white/40 hover:text-white text-xl transition-colors">✕</button>
+                </div>
+                
+                <!-- Body -->
+                <div class="p-6 md:p-8">
+                    <h2 id="report-title" class="text-2xl md:text-3xl font-black tracking-tight mb-6 leading-tight">Título do Relatório</h2>
+                    <div id="report-body" class="text-white/80 text-sm md:text-base leading-relaxed whitespace-pre-wrap font-sans">
+                        Corpo do texto da análise...
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <div class="px-6 md:px-8 py-5 border-t border-white/5 flex justify-end bg-black/20">
+                    <button onclick="closeReportModal()" class="bg-white text-black px-8 py-3 rounded text-[10px] md:text-xs font-bold uppercase tracking-widest hover:bg-white/90 transition-all active:scale-95">Entendido</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-content-radar" class="hidden anim anim-up max-w-5xl mx-auto">
+            <div class="liquid-glass rounded-3xl overflow-hidden">
+                <div class="p-8 border-b border-white/5">
+                    <h3 class="text-xl font-black uppercase tracking-tight">Meus Ativos</h3>
+                    <p class="text-xs text-white/30">Acompanhamento em tempo real das suas posições.</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="text-[10px] font-mono text-white/20 uppercase bg-black/20">
+                            <tr>
+                                <th class="p-6">Ativo</th>
+                                <th class="p-6">Preço Entrada</th>
+                                <th class="p-6">Performance</th>
+                                <th class="p-6">Recomendação IA</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm">
+                            <tr class="border-b border-white/5 hover:bg-white/5 transition">
+                                <td class="p-6 font-bold text-white/40" colspan="4">Nenhum ativo em custódia. Execute uma operação no Terminal.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-content-teses" class="hidden anim anim-up max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="liquid-glass p-8 rounded-3xl">
+                <span class="text-[10px] font-mono text-cyan-400 uppercase font-bold mb-4 block">Desempenho Recente</span>
+                <h3 id="tese-titulo" class="text-3xl font-black mb-6">Aguardando Operação</h3>
+                <div class="chart-container">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis de Estado Globais
+        window.currentBudget = "";
+        window.onbBudget = "";
+        window.currentAIReport = null;
+
+        // --- FUNÇÕES DE ONBOARDING ---
+        window.nextOnboardingStep = function(step) {
+            document.querySelectorAll('[id^=onb-step-]').forEach(el => {
+                el.classList.remove('opacity-100', 'translate-y-0');
+                el.classList.add('opacity-0', 'pointer-events-none');
+            });
+
+            const target = document.getElementById('onb-step-' + step);
+            if (target) {
+                target.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-8');
+                target.classList.add('opacity-100', 'translate-y-0');
+                target.style.pointerEvents = 'auto';
+            }
+        };
+
+        window.pressOnboardingKey = function(val) {
+            if (window.onbBudget.length < 9) {
+                window.onbBudget += val;
+                const valStr = window.onbBudget === "" ? "0" : parseInt(window.onbBudget).toLocaleString('pt-BR');
+                document.getElementById('onb-display').innerText = "R$ " + valStr;
+            }
+        };
+
+        window.clearOnboardingKey = function() {
+            window.onbBudget = "";
+            document.getElementById('onb-display').innerText = "R$ 0";
+        };
+
+        window.finishOnboardingInput = async function() {
+            if (window.onbBudget === "") {
+                const display = document.getElementById('onb-display');
+                if (display) {
+                    display.classList.add('text-crimson-400');
+                    setTimeout(() => display.classList.remove('text-crimson-400'), 400);
+                }
+                return;
+            }
+
+            window.nextOnboardingStep(3);
+
+            if (isPreviewEnv) {
+                setTimeout(() => {
+                    const textEl = document.getElementById('onb-loading-text');
+                    if(textEl) textEl.innerText = "AMBIENTE DE TESTES (CANVAS)";
+                    const subTextEl = document.getElementById('onb-sub-loading');
+                    if(subTextEl) subTextEl.innerHTML = "<p class='text-crimson-400 font-bold'>APIs externas bloqueadas neste ambiente.</p><p>Gerando relatório visual demonstrativo...</p>";
+                }, 500);
+            } else {
+                setTimeout(() => {
+                    const textEl = document.getElementById('onb-loading-text');
+                    if(textEl) textEl.innerText = "GERANDO RELATÓRIO DE INVESTIMENTO...";
+                }, 1000);
+            }
+
+            window.currentBudget = window.onbBudget;
+            window.updateDisplay();
+
+            try {
+                await window.runAnalysis();
+            } catch(e) {
+                console.warn("[CORTEX] Erro capturado no Onboarding", e);
+            }
+
+            const overlay = document.getElementById('cortex-onboarding');
+            if(overlay) {
+                overlay.classList.add('opacity-0', 'pointer-events-none');
+                setTimeout(() => { overlay.remove(); }, 1000);
+            }
+        };
+
+        // --- FUNÇÕES DO TERMINAL E NAVEGAÇÃO ---
+        window.pressKey = (v) => { window.currentBudget += v; window.updateDisplay(); };
+        window.clearNumpad = () => { window.currentBudget = ""; window.updateDisplay(); };
+        window.updateDisplay = () => {
+            const el = document.getElementById('terminal-display');
+            if (el) el.innerText = "R$ " + (window.currentBudget || "0");
+        };
+
+        let jarvisTyping;
+        const jarvisMessages = [];
+
+        window.startJarvis = function() {
+            const el = document.getElementById('jarvis-greeting');
+            if (!el) return;
+            el.innerHTML = "";
+            let line = 0;
+            let char = 0;
+            clearInterval(jarvisTyping);
+
+            function type() {
+                if (line < jarvisMessages.length) {
+                    if (char < jarvisMessages[line].length) {
+                        el.innerHTML += jarvisMessages[line].charAt(char);
+                        char++;
+                        jarvisTyping = setTimeout(type, 30);
+                    } else {
+                        el.innerHTML += "<br>";
+                        line++;
+                        char = 0;
+                        jarvisTyping = setTimeout(type, 600);
+                    }
+                }
+            }
+            type();
+        }
+
+        window.openTerminalModal = function() {
+            const modal = document.getElementById('terminal-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+                window.startJarvis();
+            }
+        };
+
+        window.closeTerminalModal = function() {
+            const modal = document.getElementById('terminal-modal');
+            if (modal) {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        };
+
+        window.openReportModal = function(title, body, isError = false) {
+            const modal = document.getElementById('report-modal');
+            const titleEl = document.getElementById('report-title');
+            const bodyEl = document.getElementById('report-body');
+            const led = document.getElementById('report-led');
+            const tag = document.getElementById('report-tag');
+            
+            if(titleEl) titleEl.innerText = title;
+            if(bodyEl) bodyEl.innerText = body;
+
+            if(isError) {
+                if(led) led.className = "status-led led-alert animate-pulse";
+                if(tag) {
+                    tag.innerText = "Erro de Processamento";
+                    tag.className = "text-[10px] md:text-xs font-bold text-crimson-400 uppercase tracking-widest";
+                }
+            } else {
+                if(led) led.className = "status-led led-active";
+                if(tag) {
+                    tag.innerText = "Diretriz Estratégica";
+                    tag.className = "text-[10px] md:text-xs font-bold text-cyan-400 uppercase tracking-widest";
+                }
+            }
+
+            if (modal) {
+                modal.classList.remove('hidden');
+                setTimeout(() => modal.classList.remove('opacity-0'), 10);
+            }
+        };
+
+        window.closeReportModal = function() {
+            const modal = document.getElementById('report-modal');
+            if (modal) {
+                modal.classList.add('opacity-0');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        };
+
+        window.switchTab = (tab) => {
+            const contents = ['feed', 'radar', 'teses'];
+
+            contents.forEach(c => {
+                const el = document.getElementById('tab-content-' + c);
+                const btn = document.getElementById('tab-' + c);
+                if (el) {
+                    el.classList.add('hidden');
+                    el.classList.remove('is-visible');
+                }
+                if (btn) {
+                    btn.classList.remove('text-white');
+                    btn.classList.add('text-white/40');
+                }
+            });
+
+            const activeEl = document.getElementById('tab-content-' + tab);
+            const activeBtn = document.getElementById('tab-' + tab);
+
+            if (activeEl) {
+                activeEl.classList.remove('hidden');
+                setTimeout(() => activeEl.classList.add('is-visible'), 10);
+            }
+            if (activeBtn) {
+                activeBtn.classList.remove('text-white/40');
+                activeBtn.classList.add('text-white');
+            }
+        };
+
+        // --- FIREBASE SETUP ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCPYLWTEX0E1a3BWU0tj7-qtMdYHoQKeng",
+            authDomain: "myshelf-54cf6.firebaseapp.com",
+            projectId: "myshelf-54cf6",
+            storageBucket: "myshelf-54cf6.firebasestorage.app",
+            messagingSenderId: "769132186874",
+            appId: "1:769132186874:web:514070a8dd4b1847ab0d43"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let appId = firebaseConfig.projectId;
+
+        // Detecta se estamos rodando em Preview Restrito
+        const isPreviewEnv = window.location.hostname === '' || window.location.protocol.includes('about') || window.location.protocol.includes('blob');
+
+        if (isPreviewEnv) {
+            const warningEl = document.getElementById('canvas-warning');
+            if (warningEl) {
+                warningEl.classList.remove('hidden');
+                setTimeout(() => warningEl.classList.add('is-visible'), 1500);
+            }
+        }
+
+        const initCanvasAuth = async () => {
+            if (!isPreviewEnv) return;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (e) {
+                console.warn("[CORTEX] Autenticação simulada falhou. Inicializando em fallback.", e);
+                fetchMarketData();
+                window.initChart();
+            }
+        };
+        initCanvasAuth();
+
+        // --- SISTEMA DE DADOS E INTELIGÊNCIA ---
+        function updateFeedUI(data, isCached, personalizedAI = null) {
+            if (personalizedAI) {
+                window.currentAIReport = personalizedAI;
+            }
+
+            const titleEl = document.getElementById('news-title');
+            if (titleEl) {
+                if (window.currentAIReport) {
+                    titleEl.innerText = window.currentAIReport.title || "RELATÓRIO CONCLUÍDO";
+                    document.getElementById('news-body').innerText = window.currentAIReport.body || "Análise gerada com sucesso.";
+                    document.getElementById('news-status-text').innerText = `Análise: Capital R$ ${window.currentBudget}`;
+                    document.getElementById('news-indicator').className = "status-led led-active";
+                } else {
+                    titleEl.innerText = "AGUARDANDO VALOR";
+                    document.getElementById('news-body').innerText = "Acesse a aba Terminal, insira seu capital disponível e inicie a pesquisa para receber uma recomendação.";
+                    document.getElementById('news-status-text').innerText = isCached ? "Servidor: Sincronizado" : "Servidor: Atualizado";
+                    document.getElementById('news-indicator').className = "status-led led-sync";
+                }
+            }
+
+            if (!data) return;
+
+            const tickerEl = document.getElementById('ticker-live');
+            if (tickerEl && data.tickerFeeds) {
+                tickerEl.innerHTML = data.tickerFeeds.map(f => `<span>• ${f}</span>`).join('');
+            }
+            
+            const sideBtcEl = document.getElementById('side-btc');
+            if (sideBtcEl) {
+                sideBtcEl.innerText = data.rawBTC ? `R$ ${data.rawBTC}` : "N/A";
+                document.getElementById('side-petr4').innerText = data.rawPETR4 ? `R$ ${data.rawPETR4}` : "N/A";
+                document.getElementById('side-spy').innerText = data.rawSPY ? data.rawSPY : "N/A";
+                document.getElementById('side-fred').innerText = data.rawFRED ? `${data.rawFRED}%` : "N/A";
+                document.getElementById('cache-timer').innerText = isCached ? "USANDO CACHE" : "ATUALIZADO AGORA";
+            }
+        }
+
+        async function fetchMarketData() {
+            if (isPreviewEnv) {
+                const mockData = {
+                    timestamp: Date.now(),
+                    tickerFeeds: [
+                        "BINANCE: BTC/BRL R$ 345.210,00 [SIMULADO]",
+                        "B3: PETR4 R$ 44,60 [-3.23%] [SIMULADO]",
+                        "POLYGON: S&P500 $ 530.20 [SIMULADO]",
+                        "FRED MACRO: SPREAD T10Y2Y -0.38% [SIMULADO]"
+                    ],
+                    rawBTC: "345.210,00",
+                    rawPETR4: "44,60",
+                    rawSPY: "$ 530.20",
+                    rawFRED: "-0.38"
+                };
+                updateFeedUI(mockData, false);
+                return;
+            }
+
+            const cacheRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_cache', 'latest');
+            const now = Date.now();
+            const cacheDuration = 15 * 60 * 1000;
+
+            try {
+                if (auth.currentUser) {
+                    try {
+                        const cacheSnap = await getDoc(cacheRef);
+                        if (cacheSnap.exists()) {
+                            const cachedData = cacheSnap.data();
+                            if (now - cachedData.timestamp < cacheDuration) {
+                                updateFeedUI(cachedData, true);
+                                return;
+                            }
+                        }
+                    } catch (e) { }
+                }
+
+                let liveFeeds = [];
+                let btcRaw = "", petr4Raw = "", spyRaw = "", fredRaw = "";
+
+                try {
+                    const resBRL = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCBRL');
+                    if (resBRL.ok) {
+                        const dataBRL = await resBRL.json();
+                        btcRaw = parseFloat(dataBRL.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                        liveFeeds.push(`BINANCE: BTC/BRL R$ ${btcRaw}`);
+                    } else throw new Error();
+                } catch (e) { btcRaw = "451.200,00"; liveFeeds.push(`BINANCE: BTC/BRL R$ ${btcRaw}`); }
+
+                try {
+                    const resB3 = await fetch("https://corsproxy.io/?" + encodeURIComponent("https://brapi.dev/api/quote/PETR4"), {
+                        headers: { "Authorization": "Bearer eJXkUUrC5SB2sZADWCBTQD" }
+                    });
+                    if (resB3.ok) {
+                        const dataB3 = await resB3.json();
+                        const petr4 = dataB3.results[0];
+                        petr4Raw = petr4.regularMarketPrice.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                        const varPETR4 = petr4.regularMarketChangePercent.toFixed(2);
+                        liveFeeds.push(`B3: PETR4 R$ ${petr4Raw} [${varPETR4}%]`);
+                    } else throw new Error();
+                } catch (e) { petr4Raw = "38,50"; liveFeeds.push(`B3: PETR4 R$ ${petr4Raw} [-1.20%]`); }
+
+                try {
+                    const resPolygon = await fetch('https://api.polygon.io/v2/aggs/ticker/SPY/prev?adjusted=true&apiKey=Lx9eXRE4DB3lGVmLp6zMZEQJbQrgS_Kc');
+                    if (resPolygon.ok) {
+                        const dataPolygon = await resPolygon.json();
+                        spyRaw = dataPolygon.results[0].c.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+                        liveFeeds.push(`POLYGON: S&P500 ${spyRaw}`);
+                    } else throw new Error();
+                } catch (e) { spyRaw = "$ 530.20"; liveFeeds.push(`POLYGON: S&P500 ${spyRaw}`); }
+
+                try {
+                    const resFred = await fetch("https://corsproxy.io/?" + encodeURIComponent("https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&api_key=3521256aacd147075efed79d8f6e7881&file_type=json&limit=1&sort_order=desc"));
+                    if (resFred.ok) {
+                        const dataFred = await resFred.json();
+                        fredRaw = parseFloat(dataFred.observations[0].value).toFixed(2);
+                        liveFeeds.push(`FRED MACRO: SPREAD T10Y2Y ${fredRaw}%`);
+                    } else throw new Error();
+                } catch (e) { fredRaw = "-0.38"; liveFeeds.push(`FRED MACRO: SPREAD T10Y2Y ${fredRaw}%`); }
+
+                const newCacheObject = {
+                    timestamp: now,
+                    tickerFeeds: liveFeeds,
+                    rawBTC: btcRaw,
+                    rawPETR4: petr4Raw,
+                    rawSPY: spyRaw,
+                    rawFRED: fredRaw
+                };
+
+                if (auth.currentUser) {
+                    try {
+                        await setDoc(cacheRef, newCacheObject);
+                    } catch (e) { }
+                }
+
+                updateFeedUI(newCacheObject, false);
+
+            } catch (error) { }
+        }
+
+        window.runAnalysis = async function() {
+            if (!window.currentBudget || window.currentBudget === "") {
+                const display = document.getElementById('terminal-display');
+                if (display) {
+                    display.classList.add('text-crimson-400');
+                    setTimeout(() => display.classList.remove('text-crimson-400'), 400);
+                }
+                return;
+            }
+
+            const currentBudgetValue = String(window.currentBudget);
+            const btn = document.querySelector("button[onclick='runAnalysis()']");
+            const originalText = btn ? btn.innerText : "START";
+            if (btn) btn.innerText = "PROCESSANDO...";
+
+            try {
+                if (isPreviewEnv) {
+                     await new Promise(r => setTimeout(r, 2000));
+
+                     const numericBudget = parseInt(currentBudgetValue.replace(/\D/g,'')) || 0;
+
+                     let mockTitle = "Oportunidade Identificada: Render Token (RNDR)";
+                     let mockBody = `Nossos sistemas detectaram um aumento incomum no volume de negociações institucionais para o ativo RNDR.\n\nEstratégia sugerida:\n• Alocação recomendada: R$ ${currentBudgetValue}\n• Plataforma: Binance (Mercado Spot)\n• Expectativa de retorno: Cerca de 24%\n• Risco de correção: 8%\n• Horizonte da operação: 4 dias\n\nRecomendamos que você realize a entrada ainda hoje para aproveitar essa distorção de preço no mercado.`;
+
+                     if (numericBudget > 10000) {
+                         mockTitle = "Proteção de Capital: Tesouro IPCA+ 2029";
+                         mockBody = `Para este volume de capital, o cenário atual exige proteção contra a inflação, mantendo uma rentabilidade sólida e segura.\n\nEstratégia sugerida:\n• Alocação recomendada: R$ ${currentBudgetValue}\n• Ativo: Tesouro IPCA+ 2029\n• Expectativa de retorno: IPCA + 6.1% ao ano\n• Perfil de risco: Baixo\n\nVocê pode realizar essa aplicação de forma simples através do aplicativo da sua corretora de preferência.`;
+                     }
+
+                     updateFeedUI({
+                        rawBTC: "345.210,00",
+                        rawPETR4: "44,60",
+                        rawSPY: "$ 530.20",
+                        rawFRED: "-0.38"
+                     }, false);
+
+                     window.switchTab('feed');
+                     window.closeTerminalModal();
+                     window.openReportModal(mockTitle, mockBody);
+                     return;
+                }
+
+                if (auth.currentUser) {
+                    try {
+                        const userRef = doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, 'profile', 'data');
+                        await setDoc(userRef, { budget_simulado: currentBudgetValue }, { merge: true });
+                    } catch(e) {}
+                }
+
+                let marketDataString = "Cenário base: Volatilidade padrão.";
+                let cachedData = null;
+                const cacheRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_cache', 'latest');
+
+                try {
+                    const cacheSnap = await getDoc(cacheRef);
+                    if(cacheSnap.exists()) {
+                        cachedData = cacheSnap.data();
+                        let btc = cachedData.rawBTC || "451.200,00";
+                        let petr4 = cachedData.rawPETR4 || "38,50";
+                        let spy = cachedData.rawSPY || "$ 530.20";
+                        let fred = cachedData.rawFRED || "-0.38";
+
+                        marketDataString = `BTC: R$ ${btc}. PETR4: R$ ${petr4}. S&P500: ${spy}. FRED Spread Risco: ${fred}%.`;
+                    }
+                } catch(e) {}
+
+                let personalizedAI = {
+                    title: "ALVO: PROCESSAMENTO COMPROMETIDO",
+                    body: "Não foi possível conectar ao motor de IA neste momento."
+                };
+
+                // CHAVE INTEGRADA AQUI
+                const apiKey = "AIzaSyB63176rblC2Hbgu7-rvMoaNMo-ohl982k"; 
+                
+                if (!apiKey || apiKey === "COLOQUE_SUA_CHAVE_AQUI" || apiKey === "") {
+                    throw new Error("Erro Crítico: Chave de API ausente.\nVocê precisa colar a sua API Key na variável 'apiKey' no código.");
+                }
+
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const options = {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Capital do usuário: R$ ${currentBudgetValue}. Status: ${marketDataString}` }] }],
+                        systemInstruction: { parts: [{ text: `Você é o consultor financeiro do sistema CORTEX. O usuário tem EXATAMENTE R$ ${currentBudgetValue} para investir. Sugira um ativo adequado para esse valor. Escreva de forma natural, clara e profissional, como um analista humano conversando com o cliente. Diga o motivo da escolha, o retorno esperado, os riscos e como ele deve fazer a compra. Retorne EXCLUSIVAMENTE um objeto JSON neste formato: {"title": "Nome do Ativo", "body": "Explicação natural em texto limpo com quebras de linha."}` }] },
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: {
+                                    title: { type: "STRING" },
+                                    body: { type: "STRING" }
+                                }
+                            }
+                        }
+                    })
+                };
+
+                let aiResponse;
+                const delays = [1000, 2000, 4000, 8000, 16000];
+                let lastError = null;
+
+                for (let i = 0; i < 5; i++) {
+                    try {
+                        aiResponse = await fetch(url, options);
+                        if (aiResponse.ok) break;
+                        
+                        const errorText = await aiResponse.text();
+                        lastError = new Error(`API HTTP ${aiResponse.status}: ${errorText}`);
+                        
+                        if (aiResponse.status === 403 || aiResponse.status === 401) break;
+                    } catch (err) {
+                        lastError = err;
+                    }
+                    
+                    if (i < 4 && (!aiResponse || !aiResponse.ok)) {
+                        await new Promise(r => setTimeout(r, delays[i]));
+                    }
+                }
+
+                if (!aiResponse || !aiResponse.ok) {
+                    throw lastError || new Error("Falha de rede ao contatar a API.");
+                }
+
+                const aiData = await aiResponse.json();
+                const rawText = aiData.candidates[0].content.parts[0].text;
+                personalizedAI = JSON.parse(rawText);
+
+                updateFeedUI(cachedData, true, personalizedAI);
+                window.closeTerminalModal();
+                window.switchTab('feed');
+                window.openReportModal(personalizedAI.title, personalizedAI.body);
+
+            } catch(e) {
+                console.warn("[CORTEX] Erro no processamento principal", e);
+                window.closeTerminalModal();
+                
+                let errorDetails = e.message || String(e);
+                let friendlyMessage = `Ocorreu uma instabilidade ao gerar a diretriz.\n\nDetalhe técnico retornado pelo servidor:\n${errorDetails}\n\nPor favor, tente novamente em alguns instantes.`;
+
+                if (errorDetails.includes("403") || errorDetails.includes("API_KEY_INVALID")) {
+                    friendlyMessage = `Acesso Negado (Erro 403).\n\nA chave de API fornecida é inválida ou não possui as permissões adequadas no Google Cloud.\n\nDetalhe:\n${errorDetails}`;
+                } else if (errorDetails.includes("Failed to fetch")) {
+                    friendlyMessage = "Conexão bloqueada pelo navegador (CORS) ou instabilidade de rede.\n\nO navegador impediu a requisição direta ao servidor de IA por motivos de segurança na rede atual.";
+                }
+
+                window.openReportModal(
+                    "Falha na Conexão", 
+                    friendlyMessage,
+                    true
+                );
+                window.switchTab('feed');
+            } finally {
+                if (btn) btn.innerText = originalText;
+            }
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                if (!isPreviewEnv) {
+                    try { window.location.href = 'index.html'; } catch(e) {}
+                }
+            } else {
+                try {
+                    const userRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
+                    const snap = await getDoc(userRef);
+                    if (snap.exists() && snap.data().budget_simulado) {
+                        window.currentBudget = snap.data().budget_simulado;
+                        window.updateDisplay();
+
+                        const overlay = document.getElementById('cortex-onboarding');
+                        if (overlay) overlay.remove();
+
+                        window.runAnalysis();
+                    }
+                } catch(e) {}
+
+                fetchMarketData();
+                window.initChart();
+            }
+        });
+
+        window.initChart = function() {
+            const ctx = document.getElementById('mainChart');
+            if (!ctx) return;
+            new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: ['---', '---', '---', '---', '---', '---'],
+                    datasets: [{
+                        label: 'Aguardando Dados',
+                        data: [0, 0, 0, 0, 0, 0],
+                        borderColor: '#00F0FF',
+                        borderWidth: 2,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        window.logout = () => {
+            signOut(auth).then(() => {
+                if (!isPreviewEnv) { window.location.href = 'index.html'; }
+            });
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+             document.querySelectorAll('.anim').forEach(el => new IntersectionObserver((entries) => {
+                 if (entries[0].isIntersecting) el.classList.add('is-visible');
+             }).observe(el));
+        });
+    </script>
+</body>
+</html>
